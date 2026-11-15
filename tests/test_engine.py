@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 from algorithms.engine import Algorithm, Params, backtest
@@ -67,3 +68,12 @@ def test_atr_target_uses_yesterdays_atr():
     df["atr_14"] = [5.0, 5.0, 5.0, 5.0]   # ATR% = 5% sobre close=100 -> meta +5% = 105
     t = backtest(_AtrTarget([0], **_p(target_pct=0.5)), df).trades.iloc[0]
     assert t.reason == "meta" and abs(t.exit_price - 105) < 1e-9
+
+
+def test_features_ibs_and_rsi2():
+    from algorithms import features as F
+    df = pd.DataFrame({"open": [1, 1, 1, 1.], "high": [2, 2, 2, 1.], "low": [0, 0, 0, 1.], "close": [0, 1, 2, 1.]})
+    ibs = F.ibs(df)
+    assert list(ibs[:3]) == [0.0, 0.5, 1.0] and np.isnan(ibs[3])   # rango 0 -> NaN, no divide por cero
+    r = F.rsi(pd.DataFrame({"close": np.arange(1, 30, dtype=float)}), 2)
+    assert r.iloc[-1] > 99 and r.index.equals(pd.RangeIndex(29))

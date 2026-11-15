@@ -50,7 +50,7 @@ def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 20
     out = []
     with StockDB(db_path) as db:
         for sym in symbols:
-            df = db.load(sym).sort_values("date").reset_index(drop=True)
+            df = db.load(sym, with_market=db.has_market()).sort_values("date").reset_index(drop=True)
             if len(df) < warmup + 100:
                 continue
             df = df.iloc[warmup:].reset_index(drop=True)

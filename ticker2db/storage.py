@@ -46,7 +46,12 @@ class StockDB:
                 symbol TEXT NOT NULL, interval TEXT NOT NULL, date TEXT NOT NULL,
                 PRIMARY KEY (symbol, interval, date))"""
         )
+        self.conn.execute(
+            """CREATE TABLE IF NOT EXISTS symbol_info (
+                symbol TEXT PRIMARY KEY, category TEXT NOT NULL, description TEXT)"""
+        )
         self.conn.commit()
+        self._market_cache: Optional[pd.DataFrame] = None
 
     # ---------- helpers ----------
     @staticmethod
@@ -108,8 +113,39 @@ class StockDB:
             (symbol.upper(), interval)).fetchone()
         return pd.Timestamp(row[0]) if row and row[0] else None
 
-    def symbols(self) -> List[str]:
-        return [r[0] for r in self.conn.execute("SELECT DISTINCT symbol FROM prices ORDER BY 1")]
+    def register_symbols(self, rows: Iterable[tuple]) -> None:
+        """Registra (símbolo, categoría, descripción). Las categorías de mercado (índices, ETFs...)
+        quedan fuera de `symbols()`, que es el universo de acciones."""
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO symbol_info (symbol, category, description) VALUES (?, ?, ?) "
+                "ON CONFLICT(symbol) DO UPDATE SET category=excluded.category, description=excluded.description",
+                [(s.upper(), c, d) for s, c, d in rows])
+        self._market_cache = None
+
+    def symbols(self, include_market: bool = False) -> List[str]:
+        """Símbolos con precios. Por defecto solo acciones (excluye índices/ETFs registrados)."""
+        sql = "SELECT DISTINCT symbol FROM prices"
+        if not include_market:
+            sql += " WHERE symbol NOT IN (SELECT symbol FROM symbol_info WHERE category != 'stock')"
+        return [r[0] for r in self.conn.execute(sql + " ORDER BY 1")]
+
+    def market_symbols(self, category: Optional[str] = None) -> List[str]:
+        sql, params = "SELECT symbol FROM symbol_info WHERE category != 'stock'", []
+        if category:
+            sql += " AND category = ?"; params.append(category)
+        have = {r[0] for r in self.conn.execute("SELECT DISTINCT symbol FROM prices")}
+        return [r[0] for r in self.conn.execute(sql + " ORDER BY category, symbol", params) if r[0] in have]
+
+    def has_market(self) -> bool:
+        return bool(self.market_symbols())
+
+    def market_features(self, refresh: bool = False) -> pd.DataFrame:
+        """Variables `mkt_*` (ver ticker2db.market). Se calculan una vez y se guardan en memoria."""
+        if self._market_cache is None or refresh:
+            from .market import market_features
+            self._market_cache = market_features(self)
+        return self._market_cache
 
     def load(
         self,
@@ -118,8 +154,13 @@ class StockDB:
         start: Optional[str] = None,
         end: Optional[str] = None,
         with_indicators: bool = True,
+        with_market: bool = False,
     ) -> pd.DataFrame:
-        """Devuelve precios (+ indicadores) como DataFrame con `date` datetime."""
+        """Devuelve precios (+ indicadores) como DataFrame con `date` datetime.
+
+        `with_market=True` añade las columnas `mkt_*` (VIX, DXY, tasas, S&P 500, crédito...) con el
+        valor del mismo día o, si ese día no hubo dato, el último disponible (máx. 5 días).
+        """
         sql = "SELECT p.*"
         if with_indicators:
             ind = [c for c in self._columns("indicators") if c not in KEYS]
@@ -141,4 +182,11 @@ class StockDB:
         sql += " WHERE " + " AND ".join(where) + " ORDER BY p.symbol, p.date"
         df = pd.read_sql_query(sql, self.conn, params=params)
         df["date"] = pd.to_datetime(df["date"])
+        if with_market and not df.empty:
+            mf = self.market_features()
+            if not mf.empty:
+                idx = mf.index.union(pd.DatetimeIndex(df["date"].unique()))
+                aligned = mf.reindex(idx).ffill(limit=5).reindex(pd.DatetimeIndex(df["date"]))
+                aligned.index = df.index
+                df = pd.concat([df, aligned], axis=1)
         return df

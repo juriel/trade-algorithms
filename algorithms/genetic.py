@@ -55,6 +55,11 @@ class GAConfig:
     min_trades: int = 30
     validate: bool = True
     db_path: str = "data/stocks.db"
+    # --- afinado (algorithms.tune) ---
+    train_end: str = "2019-12-31"    # entrenamiento y selección solo con periodos hasta esta fecha
+    test_start: str = "2020-01-01"   # el torneo final ("--period test") solo usa periodos desde aquí
+    train_samples: int = 60          # acciones/periodos de entrenamiento del genético
+    select_rounds: int = 10          # rondas de selección (candidato vs. variables actuales)
 
 
 def load_ga_config(path=HERE / "genetic.cfg", **overrides) -> GAConfig:
@@ -93,9 +98,21 @@ class Gene:
 
 
 def load_genes(name: str) -> List[Gene]:
+    """Genes del algoritmo: `algorithmNN/genes.cfg` si existe; si no, las variables de su
+    dataclass que tengan rango en `gene_ranges.cfg` (rangos centrales por nombre de variable)."""
     cp = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#", ";"))
     cp.optionxform = str
-    cp.read(HERE / name / "genes.cfg", encoding="utf-8")
+    own = HERE / name / "genes.cfg"
+    if own.exists():
+        cp.read(own, encoding="utf-8")
+    else:
+        central = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#", ";"))
+        central.optionxform = str
+        central.read(HERE / "gene_ranges.cfg", encoding="utf-8")
+        names = {f.name for f in fields(make_algo(name).p)}
+        for sec in central.sections():
+            if sec in names:
+                cp[sec] = central[sec]
     genes = []
     for sec in cp.sections():
         d = {k: ast.literal_eval(v) if k != "type" else v for k, v in cp[sec].items()}
@@ -110,23 +127,31 @@ Sample = Tuple[str, pd.DataFrame]
 
 
 def sample_windows(symbols: List[str], load: Callable[[str], pd.DataFrame],
-                   cfg: GAConfig, rng: random.Random) -> List[Sample]:
-    """`n_symbols` acciones al azar, cada una con un periodo de min_bars..max_bars barras."""
+                   cfg: GAConfig, rng: random.Random, date_min=None, date_max=None,
+                   n: Optional[int] = None) -> List[Sample]:
+    """`n` (por defecto `n_symbols`) acciones al azar, cada una con un periodo de
+    min_bars..max_bars barras, opcionalmente contenido en [date_min, date_max]."""
+    n = n or cfg.n_symbols
     pool = list(symbols)
     rng.shuffle(pool)
     out: List[Sample] = []
     for sym in pool:
-        if len(out) == cfg.n_symbols:
+        if len(out) == n:
             break
         df = load(sym).sort_values("date").reset_index(drop=True)
+        lo, hi = cfg.warmup_bars, len(df)
+        if date_min is not None:
+            lo = max(lo, int(df["date"].searchsorted(pd.Timestamp(date_min))))
+        if date_max is not None:
+            hi = min(hi, int(df["date"].searchsorted(pd.Timestamp(date_max), side="right")))
         length = rng.randint(cfg.min_bars, cfg.max_bars)
-        last_start = len(df) - length
-        if last_start < cfg.warmup_bars:
+        last_start = hi - length
+        if last_start < lo:
             continue  # historia insuficiente
-        start = rng.randint(cfg.warmup_bars, last_start)
+        start = rng.randint(lo, last_start)
         out.append((sym, df.iloc[start:start + length].reset_index(drop=True)))
-    if len(out) < cfg.n_symbols:
-        print(f"  aviso: solo hay {len(out)} símbolos con historia suficiente (pedidos {cfg.n_symbols})")
+    if len(out) < n:
+        print(f"  aviso: solo hay {len(out)} símbolos con historia suficiente (pedidos {n})")
     return out
 
 
@@ -141,7 +166,7 @@ def fitness(name: str, genome: dict, samples: List[Sample], cfg: GAConfig) -> fl
     for _, df in samples:
         m = backtest(algo, df).metrics
         cagr.append(m["CAGR_%"]); dd.append(abs(m["max_drawdown_%"])); trades += m["operaciones"]
-    if trades < cfg.min_trades:
+    if trades < cfg.min_trades * len(samples) / cfg.n_symbols:   # mínimo proporcional al tamaño de la muestra
         return PENALTY + trades
     return float(np.mean(cagr) - cfg.dd_penalty * np.mean(dd))
 
@@ -207,7 +232,7 @@ def optimize(name: str, cfg: GAConfig, log: Callable[[str], None] = print) -> di
     t0 = time.time()
     with StockDB(cfg.db_path) as db:
         symbols = db.symbols()
-        load = lambda s: db.load(s, with_indicators=True)
+        load = lambda s: db.load(s, with_indicators=True, with_market=db.has_market())
         train = sample_windows(symbols, load, cfg, rng)
         valid = sample_windows(symbols, load, cfg, rng) if cfg.validate else []
     log(f"\n=== {name}: {len(train)} acciones, periodos de "

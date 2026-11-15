@@ -7,7 +7,7 @@ evalúan sobre esa muestra con la misma fórmula de fitness del algoritmo genét
 Ranking final = puesto medio entre rondas (robusto a rondas atípicas con un multiplicador
 enorme o a la penalización por pocas operaciones); se informan fitness medio y mediano.
 
-Uso:  python -m algorithms.compete [--rounds 5] [--group validation] [--seed 1] [--best] [--set n_symbols=30]
+Uso:  python -m algorithms.compete [--rounds 5] [--group validation] [--period test] [--tag x] [--seed 1] [--best] [--set n_symbols=30]
   --best   usa best_variables.cfg (salida del genético) cuando existe, en vez de variables.cfg
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ def evaluate_round(names: List[str], samples, cfg: GAConfig, use_best: bool) -> 
 
 
 def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, log=print,
-            group: str = "all") -> pd.DataFrame:
+            group: str = "all", period: str = "all", tag: str = "") -> pd.DataFrame:
     names = names or discover_all()
     seed = cfg.seed if cfg.seed is not None else random.randrange(2**31)
     log(f"Torneo: {len(names)} algoritmos + {BENCH}, {rounds} rondas, "
@@ -83,9 +83,11 @@ def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, 
         symbols = db.symbols()
         if group != "all":  # mismo reparto disjunto que algorithms.analyze
             symbols = split_symbols(symbols)[0 if group == "analysis" else 1]
-        load = lambda s: db.load(s, with_indicators=True)
+        load = lambda s: db.load(s, with_indicators=True, with_market=db.has_market())
         for k in range(rounds):
-            samples = sample_windows(symbols, load, cfg, random.Random(f"{seed}-round{k}"))
+            samples = sample_windows(symbols, load, cfg, random.Random(f"{seed}-round{k}"),
+                                     date_min=cfg.test_start if period == "test" else None,
+                                     date_max=cfg.train_end if period == "train" else None)
             res = evaluate_round(names, samples, cfg, use_best)
             res["round"] = k + 1
             res["rank"] = res["fitness"].rank(ascending=False, method="min").astype(int)
@@ -99,9 +101,11 @@ def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, 
         operaciones=("operaciones", "sum"), aciertos_pct=("aciertos_%", "mean"),
         ret_medio_op_pct=("ret_medio_op_%", "mean"), exposicion_pct=("exposicion_%", "mean"),
     ).sort_values(["rank_medio", "fitness_mediana"], ascending=[True, False])
+    agg["calmar"] = agg["cagr_pct"] / agg["max_dd_pct"]   # CAGR / drawdown: no premia quedarse en efectivo
     agg.insert(0, "puesto", range(1, len(agg) + 1))
     out = Path("output"); out.mkdir(exist_ok=True)
-    suffix = "" if group == "all" else f"_{group}"
+    suffix = "".join(f"_{x}" for x in (None if group == "all" else group,
+                                       None if period == "all" else period, tag or None) if x)
     agg.round(2).to_csv(out / f"competition{suffix}.csv")
     allr.round(3).to_csv(out / f"competition_rounds{suffix}.csv", index=False)
     return agg
@@ -113,6 +117,9 @@ def main():
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--seed", type=int)
     ap.add_argument("--best", action="store_true")
+    ap.add_argument("--period", choices=["all", "train", "test"], default="all",
+                    help="train: periodos hasta train_end; test: periodos desde test_start (genetic.cfg)")
+    ap.add_argument("--tag", default="", help="sufijo para los CSV de salida (p.ej. before/after)")
     ap.add_argument("--group", choices=["all", "analysis", "validation"], default="all",
                     help="subconjunto de acciones (analysis/validation son mitades disjuntas)")
     ap.add_argument("--set", nargs="*", default=[], metavar="clave=valor", help="sobrescribe genetic.cfg")
@@ -121,7 +128,7 @@ def main():
     if a.seed is not None:
         over["seed"] = a.seed
     cfg = load_ga_config(**over)
-    agg = compete(cfg, a.rounds, a.best, a.algorithms or None, group=a.group)
+    agg = compete(cfg, a.rounds, a.best, a.algorithms or None, group=a.group, period=a.period, tag=a.tag)
     pd.set_option("display.width", 200)
     print("\n" + agg.round(2).to_string())
     print("\nGuardado en output/competition*.csv")
