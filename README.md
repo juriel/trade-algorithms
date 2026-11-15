@@ -111,11 +111,13 @@ editables, formato INI con comentarios; valores numéricos, `True/False` o `None
 | `02` | Seguimiento de tendencia | `02`, `02a` (EMAs), `02b` (ruptura), `02c` (retroceso) y `_v1`, `_v2` |
 | `03` | Retorno a la media con Bollinger | `03`, `03a` (RSI), `03b` (CCI), `03c` (MFI) y `_v1`, `_v2` |
 | `_r1`, `_r2` | Variaciones basadas en investigación en Internet | sobre los 6 mejores |
+| `_m1`, `_m2` | Filtros con variables de mercado (VIX, amplitud, S&P 500, crédito, curva de tasas) | sobre los 6 mejores |
 
 `_v1`/`_v2` son mejoras derivadas del análisis de operaciones; `_r1`/`_r2` incorporan ideas de la literatura
 (RSI(2) de Connors, IBS, confirmación de giro, filtros de régimen, stops de tiempo/ATR).
 Detalle y resultados: [`algorithms/ANALISIS.md`](algorithms/ANALISIS.md) y
-[`algorithms/ANALISIS_INVESTIGACION.md`](algorithms/ANALISIS_INVESTIGACION.md).
+[`algorithms/ANALISIS_INVESTIGACION.md`](algorithms/ANALISIS_INVESTIGACION.md) y
+[`algorithms/ANALISIS_MERCADO.md`](algorithms/ANALISIS_MERCADO.md).
 
 ### Herramientas
 
@@ -133,7 +135,7 @@ python -m algorithms.tune --dry-run                                             
 - **Genético / afinado:** `tune` entrena el genético en un grupo de acciones, hace competir al candidato contra el
   `variables.cfg` actual en otras acciones y solo lo adopta si gana; reescribe los valores conservando comentarios.
   Los espacios de búsqueda están en `algorithms/gene_ranges.cfg` (o `genes.cfg` por algoritmo).
-- Usar variables de mercado en un algoritmo: añadir la columna a `requires` y leer `df["mkt_vix"]` etc.
+- Usar variables de mercado en un algoritmo: añadir la columna a `requires` y leer `df["mkt_vix"]` etc. (ver `features.stress_score`, `stress_expansion`, `healthy_bull`). `compete --since 1996-01-01` evita periodos sin datos de mercado.
 
 ### Resultados y límites
 

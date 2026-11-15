@@ -45,7 +45,9 @@ def split_symbols(symbols: List[str], seed: int = 11) -> Tuple[List[str], List[s
 
 
 def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 200,
-                   cfg_file=None) -> pd.DataFrame:
+                   cfg_file=None, since=None, until=None) -> pd.DataFrame:
+    """Operaciones de `name` con los indicadores de ayer (y las `mkt_*` si la BD las tiene).
+    `since`/`until` filtran por fecha de entrada."""
     algo = make_algo(name, cfg=cfg_file) if cfg_file else make_algo(name)
     out = []
     with StockDB(db_path) as db:
@@ -57,10 +59,15 @@ def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 20
             r = backtest(algo, df)
             if r.trades.empty:
                 continue
-            prev = add_features(df).shift(1)[["date"] + FEATURES].rename(columns={"date": "signal_date"})
+            mkt = [c for c in df.columns if c.startswith("mkt_")]
+            prev = add_features(df).shift(1)[["date"] + FEATURES + mkt].rename(columns={"date": "signal_date"})
             prev["entry_date"] = df["date"]
             t = r.trades.merge(prev, on="entry_date", how="left")
             t["symbol"] = sym
+            if since is not None:
+                t = t[t["entry_date"] >= pd.Timestamp(since)]
+            if until is not None:
+                t = t[t["entry_date"] <= pd.Timestamp(until)]
             out.append(t)
     return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
 
@@ -85,7 +92,7 @@ def report(name: str, t: pd.DataFrame, bins: int = 4) -> str:
     y["mean"] *= 100
     y.index = [f"{i}-{i + 4}" for i in y.index]
     L.append(y.round(2).T.to_string()); L += ["", f"Retorno medio % por cuartil de cada indicador (de ayer):"]
-    for f in FEATURES:
+    for f in [c for c in t.columns if c in FEATURES or c.startswith("mkt_")]:
         s = t[[f, "return_pct"]].dropna()
         if s[f].nunique() < bins:
             continue
@@ -100,13 +107,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("algorithm")
     ap.add_argument("--group", choices=["analysis", "validation", "all"], default="analysis")
+    ap.add_argument("--since", help="solo operaciones con entrada desde esta fecha")
+    ap.add_argument("--until", help="solo operaciones con entrada hasta esta fecha")
     a = ap.parse_args()
     cfg = load_ga_config()
     with StockDB(cfg.db_path) as db:
         syms = db.symbols()
     an, va = split_symbols(syms)
     chosen = {"analysis": an, "validation": va, "all": syms}[a.group]
-    print(report(a.algorithm, collect_trades(a.algorithm, chosen, cfg.db_path)))
+    print(report(a.algorithm, collect_trades(a.algorithm, chosen, cfg.db_path, since=a.since, until=a.until)))
 
 
 if __name__ == "__main__":
