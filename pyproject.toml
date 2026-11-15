@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticker2db"
+version = "0.1.0"
+description = "Descarga de stocks (yfinance), indicadores técnicos (TA-Lib) y almacenamiento en SQLite"
+requires-python = ">=3.9"
+dependencies = ["yfinance>=0.2.40", "TA-Lib>=0.4.28", "pandas", "numpy", "requests", "lxml", "openpyxl"]
+
+[tool.setuptools]
+packages = ["ticker2db"]
