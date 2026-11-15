@@ -127,13 +127,15 @@ editables, formato INI con comentarios; valores numéricos, `True/False` o `None
 | `02` | Seguimiento de tendencia | `02`, `02a` (EMAs), `02b` (ruptura), `02c` (retroceso) y `_v1`, `_v2` |
 | `03` | Retorno a la media con Bollinger | `03`, `03a` (RSI), `03b` (CCI), `03c` (MFI) y `_v1`, `_v2` |
 | `_r1`, `_r2` | Variaciones basadas en investigación en Internet | sobre los 6 mejores |
+| `creative01`…`06` | Ideas nuevas: clímax vendedor, giro del VIX, compresión y ruptura, líderes en retroceso, interruptor macro, fin de mes | independientes |
 | `_m1`, `_m2` | Filtros con variables de mercado (VIX, amplitud, S&P 500, crédito, curva de tasas) | sobre los 6 mejores |
 
 `_v1`/`_v2` son mejoras derivadas del análisis de operaciones; `_r1`/`_r2` incorporan ideas de la literatura
 (RSI(2) de Connors, IBS, confirmación de giro, filtros de régimen, stops de tiempo/ATR).
 Detalle y resultados: [`algorithms/ANALISIS.md`](algorithms/ANALISIS.md) y
 [`algorithms/ANALISIS_INVESTIGACION.md`](algorithms/ANALISIS_INVESTIGACION.md) y
-[`algorithms/ANALISIS_MERCADO.md`](algorithms/ANALISIS_MERCADO.md).
+[`algorithms/ANALISIS_MERCADO.md`](algorithms/ANALISIS_MERCADO.md) y
+[`algorithms/ANALISIS_CREATIVOS.md`](algorithms/ANALISIS_CREATIVOS.md).
 
 ### Herramientas
 
@@ -166,5 +168,5 @@ python -m algorithms.tune --dry-run                                             
 ## Pruebas
 
 ```bash
-pytest          # 19 pruebas, todas offline (datos sintéticos)
+pytest          # 21 pruebas, todas offline (datos sintéticos)
 ```

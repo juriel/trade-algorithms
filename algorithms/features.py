@@ -74,3 +74,23 @@ def healthy_bull(df: pd.DataFrame, min_breadth: float = 45.0, min_curve: float =
     """Régimen alcista sano: S&P 500 sobre su SMA200, amplitud suficiente y curva de tasas no invertida."""
     return ((df["mkt_spx_above_sma200"] == 1) & (df["mkt_breadth200"] >= min_breadth)
             & (df["mkt_curve"] >= min_curve))
+
+
+# ----------------------------- volumen, calendario y fuerza relativa -----------------------------
+def volume_ratio(df: pd.DataFrame, n: int = 20) -> pd.Series:
+    """Volumen del día / promedio de los `n` días ANTERIORES (>2,5 = volumen climático)."""
+    avg = df["volume"].rolling(n).mean().shift(1)
+    return df["volume"] / avg.replace(0, np.nan)
+
+
+def business_days_left(df: pd.DataFrame) -> pd.Series:
+    """Días hábiles (lun-vie, sin festivos) que quedan del mes DESPUÉS de cada día. 0 = último día hábil.
+    Es calendario: se conoce de antemano, no mira datos futuros."""
+    d = pd.DatetimeIndex(df["date"])
+    end = (d + pd.offsets.MonthEnd(0) + pd.Timedelta(days=1)).values.astype("datetime64[D]")
+    return pd.Series(np.busday_count(d.values.astype("datetime64[D]"), end) - 1, index=df.index)
+
+
+def rel_strength(df: pd.DataFrame, n: int = 120) -> pd.Series:
+    """Retorno % de la acción en `n` días menos el del S&P 500 (`mkt_spx_ret{n}`, n = 60 o 120)."""
+    return df["close"].pct_change(n) * 100 - df[f"mkt_spx_ret{n}"]

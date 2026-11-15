@@ -84,6 +84,8 @@ FEATURE_DOC = {
     "mkt_tnx": "rendimiento del bono a 10 años (%)",
     "mkt_curve": "pendiente de la curva: 10 años - 13 semanas (puntos porcentuales)",
     "mkt_spx_ret20": "variación % del S&P 500 en 20 días",
+    "mkt_spx_ret60": "variación % del S&P 500 en 60 días",
+    "mkt_spx_ret120": "variación % del S&P 500 en 120 días (para fuerza relativa de una acción)",
     "mkt_spx_above_sma200": "1 si el S&P 500 está sobre su SMA200",
     "mkt_spx_dd252": "caída % del S&P 500 desde su máximo de 252 días",
     "mkt_spx_rsi14": "RSI(14) del S&P 500",
@@ -145,6 +147,8 @@ def market_features(db, breadth: bool = True) -> pd.DataFrame:
     if spx is not None:
         sma200 = spx.rolling(200).mean()
         f["mkt_spx_ret20"] = _ret(spx, 20)
+        f["mkt_spx_ret60"] = _ret(spx, 60)
+        f["mkt_spx_ret120"] = _ret(spx, 120)
         f["mkt_spx_above_sma200"] = (spx > sma200).astype(float).where(sma200.notna())
         f["mkt_spx_dd252"] = (spx / spx.rolling(252, min_periods=20).max() - 1) * 100
         f["mkt_spx_rsi14"] = pd.Series(talib.RSI(spx.to_numpy(float), 14), index=spx.index)

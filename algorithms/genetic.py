@@ -19,6 +19,7 @@ import argparse
 import ast
 import configparser
 import copy
+import functools
 import importlib
 import json
 import random
@@ -128,30 +129,43 @@ Sample = Tuple[str, pd.DataFrame]
 
 def sample_windows(symbols: List[str], load: Callable[[str], pd.DataFrame],
                    cfg: GAConfig, rng: random.Random, date_min=None, date_max=None,
-                   n: Optional[int] = None) -> List[Sample]:
-    """`n` (por defecto `n_symbols`) acciones al azar, cada una con un periodo de
-    min_bars..max_bars barras, opcionalmente contenido en [date_min, date_max]."""
+                   n: Optional[int] = None, unique: bool = False) -> List[Sample]:
+    """`n` (por defecto `n_symbols`) pruebas independientes. Cada prueba sortea:
+      1. una acción al azar (con reposición: puede repetirse en la ronda, con otro periodo),
+      2. un largo al azar de `min_bars` a `max_bars` jornadas,
+      3. una fecha de inicio al azar entre todas las posibles de esa acción.
+    Ejemplo de una ronda: AAPL desde 2010-01-04 con 350 jornadas, CAT desde 2020-10-01 con 500, ...
+    `date_min`/`date_max` restringen el rango (opcional; el sorteo ya no es sobre todo el historial) y
+    `unique=True` impide repetir acciones. `warmup_bars` evita las primeras jornadas de cada acción,
+    donde los indicadores (SMA200...) aún no están calculados."""
     n = n or cfg.n_symbols
     pool = list(symbols)
-    rng.shuffle(pool)
     out: List[Sample] = []
-    for sym in pool:
-        if len(out) == n:
-            break
+    short, used = set(), set()   # acciones sin historia suficiente / ya usadas (unique)
+    attempts = 0
+    while len(out) < n and attempts < 200 * n and len(short) < len(pool):
+        attempts += 1
+        sym = rng.choice(pool)
+        if sym in short or (unique and sym in used):
+            continue
         df = load(sym).sort_values("date").reset_index(drop=True)
         lo, hi = cfg.warmup_bars, len(df)
         if date_min is not None:
             lo = max(lo, int(df["date"].searchsorted(pd.Timestamp(date_min))))
         if date_max is not None:
             hi = min(hi, int(df["date"].searchsorted(pd.Timestamp(date_max), side="right")))
+        if hi - lo < cfg.min_bars:
+            short.add(sym)           # esta acción no tiene ni un periodo mínimo disponible
+            continue
         length = rng.randint(cfg.min_bars, cfg.max_bars)
         last_start = hi - length
         if last_start < lo:
-            continue  # historia insuficiente
+            continue                 # el largo sorteado no cabe: se vuelve a sortear la prueba
         start = rng.randint(lo, last_start)
         out.append((sym, df.iloc[start:start + length].reset_index(drop=True)))
+        used.add(sym)
     if len(out) < n:
-        print(f"  aviso: solo hay {len(out)} símbolos con historia suficiente (pedidos {n})")
+        print(f"  aviso: solo se pudieron sortear {len(out)} pruebas (pedidas {n})")
     return out
 
 
@@ -169,7 +183,8 @@ def loader(db, names=()):
     """Función símbolo -> DataFrame con precios, indicadores, `mkt_*` (si hay) y `cdl_*` (solo si algún
     algoritmo de `names` los necesita y la BD los tiene)."""
     cdl = needs_candles(names) and db.has_candles()
-    return lambda s: db.load(s, with_indicators=True, with_market=db.has_market(), with_candles=cdl)
+    return functools.lru_cache(maxsize=48)(    # las acciones se repiten entre pruebas: no releer la BD
+        lambda s: db.load(s, with_indicators=True, with_market=db.has_market(), with_candles=cdl))
 
 
 def fitness(name: str, genome: dict, samples: List[Sample], cfg: GAConfig) -> float:

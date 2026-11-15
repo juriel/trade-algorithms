@@ -77,3 +77,13 @@ def test_features_ibs_and_rsi2():
     assert list(ibs[:3]) == [0.0, 0.5, 1.0] and np.isnan(ibs[3])   # rango 0 -> NaN, no divide por cero
     r = F.rsi(pd.DataFrame({"close": np.arange(1, 30, dtype=float)}), 2)
     assert r.iloc[-1] > 99 and r.index.equals(pd.RangeIndex(29))
+
+
+def test_calendar_volume_and_relative_strength_features():
+    from algorithms import features as F
+    d = pd.DataFrame({"date": pd.to_datetime(["2024-01-29", "2024-01-30", "2024-01-31", "2024-03-28", "2024-03-29"])})
+    assert list(F.business_days_left(d)) == [2, 1, 0, 1, 0]          # 31-ene-2024 miércoles; 29-mar viernes
+    v = pd.DataFrame({"volume": [10.0] * 20 + [50.0]})
+    assert F.volume_ratio(v).iloc[-1] == 5.0 and np.isnan(F.volume_ratio(v).iloc[0])   # solo compara con días anteriores
+    s = pd.DataFrame({"close": np.linspace(100, 200, 130), "mkt_spx_ret120": 30.0})
+    assert abs(F.rel_strength(s, 120).iloc[-1] - ((200 / s["close"].iloc[9] - 1) * 100 - 30.0)) < 1e-9

@@ -73,11 +73,16 @@ def evaluate_round(names: List[str], samples, cfg: GAConfig, use_best: bool) -> 
 
 
 def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, log=print,
-            group: str = "all", period: str = "all", tag: str = "", since=None) -> pd.DataFrame:
+            group: str = "all", period: str = "all", tag: str = "", since=None,
+            show_samples: int = 0) -> pd.DataFrame:
     names = names or discover_all()
     seed = cfg.seed if cfg.seed is not None else random.randrange(2**31)
-    log(f"Torneo: {len(names)} algoritmos + {BENCH}, {rounds} rondas, "
-        f"{cfg.n_symbols} acciones/ronda, periodos {cfg.min_bars}-{cfg.max_bars} barras (seed={seed})")
+    log(f"Torneo: {len(names)} algoritmos + {BENCH}, {rounds} rondas de {cfg.n_symbols} pruebas aleatorias "
+        f"(acción, fecha de inicio y {cfg.min_bars}-{cfg.max_bars} jornadas) (seed={seed})")
+    limits = [f"{k}={v}" for k, v in (("group", group if group != "all" else None),
+              ("period", period if period != "all" else None), ("since", since)) if v]
+    if limits:
+        log("  RESTRICCIONES al sorteo: " + ", ".join(limits) + "  (el sorteo ya no cubre todo el historial)")
     per_round: List[pd.DataFrame] = []
     with StockDB(cfg.db_path) as db:
         symbols = db.symbols()
@@ -88,6 +93,10 @@ def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, 
             samples = sample_windows(symbols, load, cfg, random.Random(f"{seed}-round{k}"),
                                      date_min=cfg.test_start if period == "test" else since,
                                      date_max=cfg.train_end if period == "train" else None)
+            if show_samples and k == 0:
+                log("  ejemplo de la ronda 1:")
+                for sym, d in samples[:show_samples]:
+                    log(f"    {sym:<6} desde {d['date'].iloc[0].date()}  {len(d)} jornadas")
             res = evaluate_round(names, samples, cfg, use_best)
             res["round"] = k + 1
             res["rank"] = res["fitness"].rank(ascending=False, method="min").astype(int)
@@ -120,6 +129,7 @@ def main():
     ap.add_argument("--period", choices=["all", "train", "test"], default="all",
                     help="train: periodos hasta train_end; test: periodos desde test_start (genetic.cfg)")
     ap.add_argument("--since", help="los periodos no empiezan antes de esta fecha (p.ej. 1996-01-01: datos de mercado completos)")
+    ap.add_argument("--show-samples", type=int, default=0, metavar="N", help="muestra N pruebas de la ronda 1")
     ap.add_argument("--tag", default="", help="sufijo para los CSV de salida (p.ej. before/after)")
     ap.add_argument("--group", choices=["all", "analysis", "validation"], default="all",
                     help="subconjunto de acciones (analysis/validation son mitades disjuntas)")
@@ -129,7 +139,7 @@ def main():
     if a.seed is not None:
         over["seed"] = a.seed
     cfg = load_ga_config(**over)
-    agg = compete(cfg, a.rounds, a.best, a.algorithms or None, group=a.group, period=a.period, tag=a.tag, since=a.since)
+    agg = compete(cfg, a.rounds, a.best, a.algorithms or None, group=a.group, period=a.period, tag=a.tag, since=a.since, show_samples=a.show_samples)
     pd.set_option("display.width", 200)
     print("\n" + agg.round(2).to_string())
     print("\nGuardado en output/competition*.csv")
