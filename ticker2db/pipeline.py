@@ -24,7 +24,8 @@ def update_symbols(
     """Descarga datos nuevos, recalcula indicadores y guarda en SQLite.
 
     Si el símbolo ya existe en la BD solo se descargan las barras posteriores a
-    la última guardada; los indicadores se recalculan sobre una ventana con
+    la última guardada (salvo que `start` sea anterior al primer dato guardado:
+    entonces se vuelve a descargar todo desde `start`); los indicadores se recalculan sobre una ventana con
     histórico previo para que sean correctos. Devuelve el DataFrame completo
     (precios + indicadores) de los símbolos pedidos.
     """
@@ -35,7 +36,11 @@ def update_symbols(
     with StockDB(db_path) as db:
         for sym in symbols:
             last = db.last_date(sym, interval)
-            sym_start = (last + pd.Timedelta(days=1)).strftime("%Y-%m-%d") if last is not None else start
+            first = db.first_date(sym, interval)
+            if last is None or pd.Timestamp(start) < first:
+                sym_start = start  # símbolo nuevo o `start` anterior al histórico guardado
+            else:
+                sym_start = (last + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
             new = download_prices(sym, start=sym_start, end=end, interval=interval)
             if new.empty:
                 continue

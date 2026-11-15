@@ -102,6 +102,12 @@ class StockDB:
             (symbol.upper(), interval)).fetchone()
         return pd.Timestamp(row[0]) if row and row[0] else None
 
+    def first_date(self, symbol: str, interval: str = "1d") -> Optional[pd.Timestamp]:
+        row = self.conn.execute(
+            "SELECT MIN(date) FROM prices WHERE symbol=? AND interval=?",
+            (symbol.upper(), interval)).fetchone()
+        return pd.Timestamp(row[0]) if row and row[0] else None
+
     def symbols(self) -> List[str]:
         return [r[0] for r in self.conn.execute("SELECT DISTINCT symbol FROM prices ORDER BY 1")]
 
