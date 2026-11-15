@@ -37,13 +37,13 @@ class Params:
     slippage_pct: float = 0.0005         # deslizamiento en ejecuciones a mercado (aperturas)
 
 
-def load_cfg(path) -> dict:
-    """Lee la sección [params] de un variables.cfg. Valores: números, True/False, None o texto."""
+def load_cfg(path, section: str = "params") -> dict:
+    """Lee una sección (por defecto [params]) de un .cfg. Valores: números, True/False, None o texto."""
     cp = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#", ";"))
     cp.optionxform = str  # respeta mayúsculas/minúsculas
     cp.read(path, encoding="utf-8")
     out = {}
-    for k, v in cp["params"].items() if cp.has_section("params") else []:
+    for k, v in cp[section].items() if cp.has_section(section) else []:
         try:
             out[k] = ast.literal_eval(v)
         except (ValueError, SyntaxError):
