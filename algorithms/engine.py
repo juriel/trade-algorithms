@@ -36,6 +36,7 @@ class Params:
     stop_pct: Optional[float] = None     # vender a la apertura si el cierre de ayer cayó este % bajo la entrada
     commission_pct: float = 0.0005       # comisión por operación (cada lado)
     slippage_pct: float = 0.0005         # deslizamiento en ejecuciones a mercado (aperturas)
+    cash_interest: bool = True           # el efectivo rinde la letra a 13 sem. (mkt_irx de ayer), si la BD tiene datos de mercado
 
 
 def load_cfg(path, section: str = "params") -> dict:
@@ -104,16 +105,25 @@ class Result:
 
 
 def _metrics(equity: pd.Series, trades: pd.DataFrame, in_pos: np.ndarray,
-             close: pd.Series, p: Params) -> dict:
+             close: pd.Series, p: Params, rf_annual_pct: float = 0.0) -> dict:
     years = max((equity.index[-1] - equity.index[0]).days / 365.25, 1e-9)
     total = equity.iloc[-1] / p.initial_capital - 1
+    cagr = ((1 + total) ** (1 / years) - 1) * 100
+    bh_cagr = ((close.iloc[-1] / close.iloc[0]) ** (1 / years) - 1) * 100
+    expo = float(in_pos.mean())
+    # alpha de timing: CAGR de la estrategia menos el de una cartera con LA MISMA exposición (la acción
+    # un `expo` del tiempo y efectivo el resto). Estar siempre fuera da ~0; solo suma quien elige bien cuándo estar dentro.
+    alpha = cagr - (expo * bh_cagr + (1 - expo) * rf_annual_pct)
     daily = equity.pct_change().dropna()
     dd = (equity / equity.cummax() - 1).min()
     n = len(trades)
     return {
         "retorno_total_%": round(total * 100, 2),
-        "CAGR_%": round(((1 + total) ** (1 / years) - 1) * 100, 2),
+        "CAGR_%": round(cagr, 2),
         "buy&hold_%": round((close.iloc[-1] / close.iloc[0] - 1) * 100, 2),
+        "bh_CAGR_%": round(bh_cagr, 2),
+        "rf_CAGR_%": round(rf_annual_pct, 2),
+        "alpha_timing_%": round(alpha, 2),
         "max_drawdown_%": round(dd * 100, 2),
         "sharpe": round(daily.mean() / daily.std() * np.sqrt(252), 2) if daily.std() > 0 else None,
         "operaciones": n,
@@ -142,6 +152,12 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
     sp = None if sp is None else sp.shift(1).to_numpy(float)
     dates = df["date"].to_numpy()
     comm, slip = p.commission_pct, p.slippage_pct
+    have_rf = p.cash_interest and "mkt_irx" in df.columns
+    # interés continuo por días de calendario entre barras, con la tasa de AYER (sin mirar al futuro)
+    dt_years = np.r_[0.0, np.diff(pd.to_datetime(df["date"]).to_numpy().astype("datetime64[D]").astype(int))] / 365.0
+    rf_growth = (np.exp((df["mkt_irx"].shift(1) / 100).fillna(0).to_numpy(float) * dt_years)
+                 if have_rf else np.ones(len(df)))
+    rf_annual = float((np.exp(df["mkt_irx"].mean() / 100) - 1) * 100) if have_rf else 0.0   # rendimiento efectivo anual
 
     cash, shares, entry_i, entry_px, target, stop_px = p.initial_capital, 0, -1, 0.0, np.inf, 0.0
     trades, equity, in_pos = [], np.empty(len(df)), np.zeros(len(df), bool)
@@ -158,6 +174,7 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
         shares = 0
 
     for i in range(len(df)):
+        cash *= rf_growth[i]             # el efectivo rinde la tasa libre de riesgo de ayer
         sold_today = False
         if shares:
             if sell[i]:
@@ -193,4 +210,4 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
 
     trades_df = pd.DataFrame(trades)
     eq = pd.Series(equity, index=pd.to_datetime(df["date"]), name="equity")
-    return Result(trades_df, eq, _metrics(eq, trades_df, in_pos, df["close"], p))
+    return Result(trades_df, eq, _metrics(eq, trades_df, in_pos, df["close"], p, rf_annual))

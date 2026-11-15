@@ -60,3 +60,12 @@ def test_load_with_market_merges_by_date(tmp_path):
         vix = db.load("^VIX", with_indicators=False).set_index("date")["close"]
         assert np.isclose(out["mkt_vix"].iloc[10], vix.iloc[10])
         assert "mkt_vix" not in db.load("AAA", with_indicators=False).columns   # opt-in
+
+
+def test_total_returns_ranks_and_filters_short_history():
+    from ticker2db.universe import total_returns
+    idx = pd.bdate_range("2021-01-01", periods=300)
+    prices = pd.DataFrame({"UP": np.linspace(100, 200, 300), "DOWN": np.linspace(100, 40, 300),
+                           "SHORT": [np.nan] * 250 + list(np.linspace(10, 20, 50))}, index=idx)
+    r = total_returns(prices, min_obs=200)
+    assert list(r.sort_values().index) == ["DOWN", "UP"] and abs(r["DOWN"] + 0.6) < 1e-9   # SHORT se descarta

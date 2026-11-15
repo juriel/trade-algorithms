@@ -6,7 +6,7 @@ de descarga libre. Alternativa: slickcharts.com (bloquea peticiones automáticas
 from __future__ import annotations
 
 import io
-from typing import Optional
+from typing import Iterable, List, Optional
 
 import pandas as pd
 import requests
@@ -91,3 +91,86 @@ def get_sp500_weights(path: Optional[str] = None, timeout: int = 60) -> pd.DataF
     df = df.reset_index(drop=True)
     df.attrs["as_of"] = as_of
     return df
+
+
+# ----------------------------- ampliar el universo -----------------------------
+import re
+import random
+
+import numpy as np
+
+_TICKER = re.compile(r"^[A-Z]{1,5}$")
+
+
+def total_returns(prices: pd.DataFrame, min_obs: int) -> pd.Series:
+    """Retorno total (último / primer precio - 1) por columna; descarta las de menos de `min_obs` datos."""
+    out = {}
+    for c in prices.columns:
+        s = prices[c].dropna()
+        if len(s) >= min_obs:
+            out[c] = float(s.iloc[-1] / s.iloc[0] - 1)
+    return pd.Series(out, dtype=float)
+
+
+def _download_close(symbols: List[str], **kwargs) -> pd.DataFrame:
+    import yfinance as yf
+    raw = yf.download(symbols, auto_adjust=True, progress=False, threads=True, **kwargs)
+    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]].rename(columns={"Close": symbols[0]})
+    return close
+
+
+def worst_performers(symbols: Iterable[str], n: int = 100, years: int = 5, batch: int = 100) -> pd.DataFrame:
+    """Las `n` acciones de peor retorno total (con dividendos) en los últimos `years` años.
+
+    Descarga solo precios de cierre para ordenar (no toca la base de datos). Se descartan las que no tienen
+    al menos ~90% de las jornadas del periodo (spin-offs recientes, símbolos inválidos).
+    Devuelve symbol, retorno_pct y jornadas, de peor a mejor.
+    """
+    symbols = list(dict.fromkeys(symbols))
+    parts = []
+    for i in range(0, len(symbols), batch):
+        parts.append(_download_close(symbols[i:i + batch], period=f"{years}y", interval="1d"))
+    prices = pd.concat(parts, axis=1)
+    min_obs = int(252 * years * 0.9)
+    r = total_returns(prices, min_obs).sort_values()
+    out = pd.DataFrame({"symbol": r.index, "retorno_pct": (r.values * 100).round(2)})
+    out["jornadas"] = [int(prices[s].notna().sum()) for s in out["symbol"]]
+    return out.head(n).reset_index(drop=True)
+
+
+def russell_proxy(n: int = 20, seed: int = 0, min_cap: float = 3e8, max_cap: float = 5e9,
+                  min_bars: int = 1000) -> pd.DataFrame:
+    """~`n` acciones de pequeña capitalización de EE.UU. como APROXIMACIÓN del Russell 2000.
+
+    No es la lista oficial del Russell (iShares/FTSE Russell no ofrecen descarga libre): se usa el screener de
+    Yahoo Finance con acciones de NYSE/Nasdaq y capitalización entre `min_cap` y `max_cap`, se sortean con `seed`
+    y se exigen `min_bars` jornadas de historia (para poder sortear periodos de 300-600 jornadas).
+    Devuelve symbol, name, market_cap y exchange.
+    """
+    import yfinance as yf
+    q = yf.EquityQuery("and", [yf.EquityQuery("eq", ["region", "us"]),
+                               yf.EquityQuery("is-in", ["exchange", "NMS", "NYQ"]),
+                               yf.EquityQuery("btwn", ["intradaymarketcap", min_cap, max_cap])])
+    quotes, offset = [], 0
+    while True:
+        page = yf.screen(q, offset=offset, size=250, sortField="intradaymarketcap", sortAsc=False)["quotes"]
+        quotes += page
+        if len(page) < 250 or offset > 4000:
+            break
+        offset += 250
+    cands = [x for x in quotes if _TICKER.match(x.get("symbol", "")) and x.get("quoteType") == "EQUITY"]
+    random.Random(seed).shuffle(cands)
+    chosen = []
+    for i in range(0, len(cands), 40):
+        grp = cands[i:i + 40]
+        close = _download_close([x["symbol"] for x in grp], period="max", interval="1d")
+        for x in grp:
+            if x["symbol"] in close and close[x["symbol"]].notna().sum() >= min_bars:
+                chosen.append(x)
+                if len(chosen) == n:
+                    break
+        if len(chosen) == n:
+            break
+    return pd.DataFrame({"symbol": [x["symbol"] for x in chosen], "name": [x.get("shortName") for x in chosen],
+                         "market_cap": [x.get("marketCap") for x in chosen],
+                         "exchange": [x.get("fullExchangeName") for x in chosen]})

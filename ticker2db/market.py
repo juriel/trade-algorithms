@@ -81,6 +81,7 @@ FEATURE_DOC = {
     "mkt_dxy": "índice del dólar (cierre)",
     "mkt_dxy_ret20": "variación % del DXY en 20 días",
     "mkt_dxy_above_sma50": "1 si el DXY está sobre su media de 50 días",
+    "mkt_irx": "rendimiento de la letra del Tesoro a 13 semanas (% anual); tasa libre de riesgo del efectivo",
     "mkt_tnx": "rendimiento del bono a 10 años (%)",
     "mkt_curve": "pendiente de la curva: 10 años - 13 semanas (puntos porcentuales)",
     "mkt_spx_ret20": "variación % del S&P 500 en 20 días",
@@ -139,6 +140,8 @@ def market_features(db, breadth: bool = True) -> pd.DataFrame:
         f["mkt_dxy"] = dxy
         f["mkt_dxy_ret20"] = _ret(dxy, 20)
         f["mkt_dxy_above_sma50"] = (dxy > dxy.rolling(50).mean()).astype(float).where(dxy.rolling(50).mean().notna())
+    if c["^IRX"] is not None:
+        f["mkt_irx"] = c["^IRX"]
     if c["^TNX"] is not None:
         f["mkt_tnx"] = c["^TNX"]
         if c["^IRX"] is not None:

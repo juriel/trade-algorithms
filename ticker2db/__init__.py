@@ -4,7 +4,7 @@ from .indicators import DEFAULT_INDICATORS, add_indicators
 from .storage import StockDB
 from .market import FEATURE_DOC, MARKET_SYMBOLS, market_features, market_symbols
 from .pipeline import update_candles, update_market, update_symbols
-from .universe import get_sp500_weights, get_sp500_weights_slickcharts
+from .universe import get_sp500_weights, get_sp500_weights_slickcharts, russell_proxy, worst_performers
 
 __all__ = [
     "download_prices",
@@ -25,4 +25,6 @@ __all__ = [
     "FEATURE_DOC",
     "get_sp500_weights",
     "get_sp500_weights_slickcharts",
+    "worst_performers",
+    "russell_proxy",
 ]

@@ -7,7 +7,7 @@ Para CADA algoritmo:
   2. Evoluciona los genes definidos en `algorithmNN/genes.cfg` (selección por
      torneo, cruce uniforme, mutación, elitismo). El individuo inicial 0 son las
      variables actuales de `variables.cfg`, así nunca se parte peor que eso.
-  3. Fitness = CAGR medio% - dd_penalty * |max drawdown| medio%, sobre toda la muestra.
+  3. Fitness = alpha de timing medio% - dd_penalty * |max drawdown| medio% (ver metrics.py), sobre toda la muestra.
   4. Valida el mejor individuo en otra muestra distinta (fuera de muestra) y escribe
      `algorithmNN/best_variables.cfg` (sin tocar `variables.cfg`).
 
@@ -52,7 +52,7 @@ class GAConfig:
     crossover_rate: float = 0.8
     mutation_rate: float = 0.2
     seed: Optional[int] = None
-    dd_penalty: float = 0.5
+    dd_penalty: float = 0.0
     min_trades: int = 30
     validate: bool = True
     db_path: str = "data/stocks.db"
@@ -189,10 +189,10 @@ def loader(db, names=()):
 
 def fitness(name: str, genome: dict, samples: List[Sample], cfg: GAConfig) -> float:
     algo = make_algo(name, **genome)
-    cagr, dd, trades = [], [], 0
+    cagr, dd, trades = [], [], 0   # `cagr` guarda el alpha de timing de cada prueba (ver algorithms/metrics.py)
     for _, df in samples:
         m = backtest(algo, df).metrics
-        cagr.append(m["CAGR_%"]); dd.append(abs(m["max_drawdown_%"])); trades += m["operaciones"]
+        cagr.append(m["alpha_timing_%"]); dd.append(abs(m["max_drawdown_%"])); trades += m["operaciones"]
     if trades < cfg.min_trades * len(samples) / cfg.n_symbols:   # mínimo proporcional al tamaño de la muestra
         return PENALTY + trades
     return float(np.mean(cagr) - cfg.dd_penalty * np.mean(dd))
