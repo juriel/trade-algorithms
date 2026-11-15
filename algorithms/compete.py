@@ -25,7 +25,7 @@ from ticker2db import StockDB
 
 from .analyze import split_symbols
 from .engine import backtest
-from .genetic import PENALTY, GAConfig, load_ga_config, make_algo, sample_windows
+from .genetic import PENALTY, GAConfig, load_ga_config, loader, make_algo, sample_windows
 
 HERE = Path(__file__).parent
 BENCH = "buy&hold"
@@ -83,7 +83,7 @@ def compete(cfg: GAConfig, rounds: int = 3, use_best: bool = False, names=None, 
         symbols = db.symbols()
         if group != "all":  # mismo reparto disjunto que algorithms.analyze
             symbols = split_symbols(symbols)[0 if group == "analysis" else 1]
-        load = lambda s: db.load(s, with_indicators=True, with_market=db.has_market())
+        load = loader(db, names)
         for k in range(rounds):
             samples = sample_windows(symbols, load, cfg, random.Random(f"{seed}-round{k}"),
                                      date_min=cfg.test_start if period == "test" else since,

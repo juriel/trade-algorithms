@@ -47,6 +47,11 @@ class StockDB:
                 PRIMARY KEY (symbol, interval, date))"""
         )
         self.conn.execute(
+            """CREATE TABLE IF NOT EXISTS candles (
+                symbol TEXT NOT NULL, interval TEXT NOT NULL, date TEXT NOT NULL,
+                PRIMARY KEY (symbol, interval, date))"""
+        )
+        self.conn.execute(
             """CREATE TABLE IF NOT EXISTS symbol_info (
                 symbol TEXT PRIMARY KEY, category TEXT NOT NULL, description TEXT)"""
         )
@@ -99,6 +104,28 @@ class StockDB:
                     self.conn.execute(f"ALTER TABLE indicators ADD COLUMN {c} REAL")
         self._upsert("indicators", df, ind_cols)
         return len(df)
+
+    def save_candles(self, df: pd.DataFrame, interval: str = "1d") -> int:
+        """Guarda las columnas `cdl_*` (patrones de velas, enteros) en la tabla `candles`."""
+        if df.empty:
+            return 0
+        df = self._prep(df, interval)
+        cols = [c for c in df.columns if c.startswith("cdl_")]
+        if not cols:
+            return 0
+        for c in cols:
+            if not _IDENT.match(c):
+                raise ValueError(f"Nombre de columna no válido: {c!r}")
+        existing = set(self._columns("candles"))
+        with self.conn:
+            for c in cols:
+                if c not in existing:
+                    self.conn.execute(f"ALTER TABLE candles ADD COLUMN {c} INTEGER")
+        self._upsert("candles", df, cols)
+        return len(df)
+
+    def has_candles(self) -> bool:
+        return self.conn.execute("SELECT 1 FROM candles LIMIT 1").fetchone() is not None
 
     # ---------- lectura ----------
     def last_date(self, symbol: str, interval: str = "1d") -> Optional[pd.Timestamp]:
@@ -155,8 +182,12 @@ class StockDB:
         end: Optional[str] = None,
         with_indicators: bool = True,
         with_market: bool = False,
+        with_candles: bool = False,
     ) -> pd.DataFrame:
         """Devuelve precios (+ indicadores) como DataFrame con `date` datetime.
+
+        `with_candles=True` añade las columnas `cdl_*` de patrones de velas (+100 alcista, -100 bajista,
+        0 ninguno; sin dato = 0) si se guardaron con `update_candles`/`save_candles`.
 
         `with_market=True` añade las columnas `mkt_*` (VIX, DXY, tasas, S&P 500, crédito...) con el
         valor del mismo día o, si ese día no hubo dato, el último disponible (máx. 5 días).
@@ -166,7 +197,13 @@ class StockDB:
             ind = [c for c in self._columns("indicators") if c not in KEYS]
             if ind:
                 sql += ", " + ", ".join(f"i.{c}" for c in ind)
+        cdl = [c for c in self._columns("candles") if c not in KEYS] if with_candles else []
+        if cdl:
+            sql += ", " + ", ".join(f"COALESCE(c.{c}, 0) AS {c}" for c in cdl)
         sql += " FROM prices p"
+        if cdl:
+            sql += (" LEFT JOIN candles c ON c.symbol=p.symbol "
+                    "AND c.interval=p.interval AND c.date=p.date")
         if with_indicators:
             sql += (" LEFT JOIN indicators i ON i.symbol=p.symbol "
                     "AND i.interval=p.interval AND i.date=p.date")

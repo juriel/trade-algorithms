@@ -21,7 +21,8 @@ def run(name: str, symbol: str, db_path: str = "data/stocks.db",
         start=None, end=None, **overrides):
     algo = load_algorithm(name, **overrides)
     with StockDB(db_path) as db:
-        df = db.load(symbol, start=start, end=end, with_market=db.has_market())
+        df = db.load(symbol, start=start, end=end, with_market=db.has_market(),
+                     with_candles=any(c.startswith("cdl_") for c in algo.requires) and db.has_candles())
     if df.empty:
         raise SystemExit(f"{symbol} no está en {db_path}")
     return algo, backtest(algo, df)

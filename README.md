@@ -41,7 +41,7 @@ guarda la base de datos en Drive para que persista entre sesiones (no he probado
 ## `ticker2db`: datos
 
 ```python
-from ticker2db import update_symbols, StockDB, get_sp500_weights, update_market
+from ticker2db import update_symbols, StockDB, get_sp500_weights, update_market, update_candles
 
 # 1) Acciones: descarga incremental + indicadores + SQLite
 update_symbols(["AAPL", "NVDA", "GOOGL"], db_path="data/stocks.db", start="1900-01-01")
@@ -55,14 +55,19 @@ sp = get_sp500_weights()            # company, symbol, weight (%), yf_symbol
 
 # 4) Índices, VIX, DXY, tasas y ETFs
 update_market("data/stocks.db")
+
+# 5) Patrones de velas de TA-Lib (61 patrones CDL*), calculados sobre los precios ya guardados
+update_candles("data/stocks.db")                       # o patterns=COMMON_PATTERNS para un subconjunto
+with StockDB("data/stocks.db") as db:
+    df = db.load("AAPL", with_candles=True)            # columnas cdl_engulfing, cdl_hammer, ...
 ```
 
 - `update_symbols` solo descarga lo posterior a la última fecha guardada; si `start` es anterior al primer dato
   guardado, vuelve a descargar todo. `start="1900-01-01"` trae todo el histórico que ofrece Yahoo.
 - **Indicadores por defecto:** SMA 20/50/200, EMA 12/26, RSI, MACD, Bollinger, ATR, ADX, Stoch, CCI, OBV, MFI
   (personalizables: lista de `("FUNCION_TALIB", {params})`). En series sin volumen (VIX) se omiten OBV y MFI.
-- **Tablas SQLite:** `prices` (OHLCV), `indicators` (columnas dinámicas) y `symbol_info` (registro de símbolos de
-  mercado). Clave `(symbol, interval, date)`. `StockDB.symbols()` devuelve solo acciones;
+- **Tablas SQLite:** `prices` (OHLCV), `indicators` (columnas dinámicas), `candles` (patrones de velas, opcional) y
+  `symbol_info` (registro de símbolos de mercado). Clave `(symbol, interval, date)`. `StockDB.symbols()` devuelve solo acciones;
   `symbols(include_market=True)` incluye índices y ETFs.
 - **`get_sp500_weights`** usa los holdings de SPY (descarga libre; los pesos suman ~99,9%). La versión de slickcharts
   (`get_sp500_weights_slickcharts(path=...)`) necesita un HTML guardado a mano: el sitio bloquea peticiones automáticas.
@@ -71,15 +76,26 @@ update_market("data/stocks.db")
   (VIX, VIX/VIX3M, DXY, curva de tasas, S&P 500 sobre SMA200, drawdown, crédito HYG/LQD, defensivos vs. cíclicos,
   amplitud del mercado). Ver `ticker2db.FEATURE_DOC`. Están calculadas con datos hasta el cierre de cada día.
 
+- **Patrones de velas** (`ticker2db/candles.py`): cada patrón vale `+100` (alcista), `-100` (bajista) o `0`
+  (algunos usan `±200`); los doji y similares (`NEUTRAL_PATTERNS`) valen siempre `+100` aunque sean de indecisión, no
+  alcistas; columnas `cdl_<nombre>` (p.ej. `cdl_engulfing`, `cdl_3whitesoldiers`). Solo usan velas
+  hasta ese día. `add_candle_patterns(df, ["ENGULFING", "HAMMER"])` los calcula sobre un DataFrame sin base de datos;
+  `candle_summary(df)` resume cuántos patrones alcistas/bajistas hay por día; `pattern_info()` lista los 61 con su
+  nombre; `COMMON_PATTERNS` es un subconjunto de 26 populares. Se guardan en la tabla `candles` (opcional,
+  `update_candles`, o `update_symbols(..., candles=True)`); `load(with_candles=True)` los une a precios.
+  Un algoritmo los usa añadiendo la columna (p.ej. `"cdl_hammer"`) a `requires`: los cargadores solo los cargan si algún
+  algoritmo los pide.
+
 ### Generar `data/stocks.db`
 
 La base (cientos de MB con 200 acciones desde 1900) no se versiona. Para recrearla:
 
 ```python
-from ticker2db import get_sp500_weights, update_symbols, update_market
+from ticker2db import get_sp500_weights, update_symbols, update_market, update_candles
 syms = get_sp500_weights().head(200)["yf_symbol"].tolist()
 update_symbols(syms, db_path="data/stocks.db", start="1900-01-01")   # ~8 min
 update_market("data/stocks.db")
+update_candles("data/stocks.db")                                      # opcional: patrones de velas
 ```
 
 ## `algorithms`: backtest
@@ -150,5 +166,5 @@ python -m algorithms.tune --dry-run                                             
 ## Pruebas
 
 ```bash
-pytest          # 14 pruebas, todas offline (datos sintéticos)
+pytest          # 19 pruebas, todas offline (datos sintéticos)
 ```

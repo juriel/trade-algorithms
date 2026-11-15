@@ -19,7 +19,7 @@ import pandas as pd
 from ticker2db import StockDB
 
 from .engine import backtest
-from .genetic import make_algo, load_ga_config
+from .genetic import load_ga_config, loader, make_algo
 
 FEATURES = ["rsi_14", "stoch_k", "adx_14", "cci_14", "mfi_14", "atr_pct", "dist_sma20",
             "dist_sma50", "dist_sma200", "slope_sma200", "bb_width", "bb_pos", "macd_hist_pct"]
@@ -51,8 +51,9 @@ def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 20
     algo = make_algo(name, cfg=cfg_file) if cfg_file else make_algo(name)
     out = []
     with StockDB(db_path) as db:
+        load = loader(db, [name])
         for sym in symbols:
-            df = db.load(sym, with_market=db.has_market()).sort_values("date").reset_index(drop=True)
+            df = load(sym).sort_values("date").reset_index(drop=True)
             if len(df) < warmup + 100:
                 continue
             df = df.iloc[warmup:].reset_index(drop=True)

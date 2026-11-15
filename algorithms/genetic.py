@@ -160,6 +160,18 @@ def make_algo(name: str, **genome):
     return importlib.import_module(f"algorithms.{name}").Algorithm(**genome)
 
 
+def needs_candles(names) -> bool:
+    """¿Alguno de los algoritmos usa columnas de patrones de velas (`cdl_*`) en `requires`?"""
+    return any(c.startswith("cdl_") for n in names for c in make_algo(n).requires)
+
+
+def loader(db, names=()):
+    """Función símbolo -> DataFrame con precios, indicadores, `mkt_*` (si hay) y `cdl_*` (solo si algún
+    algoritmo de `names` los necesita y la BD los tiene)."""
+    cdl = needs_candles(names) and db.has_candles()
+    return lambda s: db.load(s, with_indicators=True, with_market=db.has_market(), with_candles=cdl)
+
+
 def fitness(name: str, genome: dict, samples: List[Sample], cfg: GAConfig) -> float:
     algo = make_algo(name, **genome)
     cagr, dd, trades = [], [], 0
@@ -232,7 +244,7 @@ def optimize(name: str, cfg: GAConfig, log: Callable[[str], None] = print) -> di
     t0 = time.time()
     with StockDB(cfg.db_path) as db:
         symbols = db.symbols()
-        load = lambda s: db.load(s, with_indicators=True, with_market=db.has_market())
+        load = loader(db, [name])
         train = sample_windows(symbols, load, cfg, rng)
         valid = sample_windows(symbols, load, cfg, rng) if cfg.validate else []
     log(f"\n=== {name}: {len(train)} acciones, periodos de "

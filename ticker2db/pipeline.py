@@ -5,6 +5,7 @@ from typing import Iterable, List, Optional, Union
 
 import pandas as pd
 
+from .candles import add_candle_patterns
 from .downloader import download_prices
 from .indicators import DEFAULT_INDICATORS, IndicatorSpec, add_indicators
 from .market import market_symbols
@@ -23,6 +24,7 @@ def update_symbols(
     end: Optional[str] = None,
     indicators: Optional[List[IndicatorSpec]] = None,
     return_data: bool = True,
+    candles: Union[bool, Iterable[str]] = False,
 ) -> Optional[pd.DataFrame]:
     """Descarga datos nuevos, recalcula indicadores y guarda en SQLite.
 
@@ -55,7 +57,32 @@ def update_symbols(
             full = add_indicators(hist, inds)
             ind_cols = [c for c in full.columns if c not in hist.columns]
             db.save_indicators(full[["symbol", "date"] + ind_cols], interval)
+            if candles is not False:  # True = los 61 patrones; o una lista de nombres
+                cdl = add_candle_patterns(hist, None if candles is True else candles)
+                db.save_candles(cdl[["symbol", "date"] + [c for c in cdl.columns if c.startswith("cdl_")]], interval)
         return db.load(symbols, interval) if return_data else None
+
+
+def update_candles(
+    db_path: str = "stocks.db",
+    symbols: Optional[Iterable[str]] = None,
+    interval: str = "1d",
+    patterns: Optional[Iterable[str]] = None,
+    include_market: bool = False,
+) -> int:
+    """Calcula los patrones de velas de TA-Lib sobre los precios YA guardados (sin descargar nada) y los
+    guarda en la tabla `candles`. `symbols`: por defecto todas las acciones. `patterns`: por defecto los 61.
+    Devuelve el número de filas escritas. Es idempotente (vuelve a calcular todo el historial)."""
+    total = 0
+    with StockDB(db_path) as db:
+        syms = [s.upper() for s in symbols] if symbols is not None else db.symbols(include_market=include_market)
+        for sym in syms:
+            px = db.load(sym, interval, with_indicators=False)
+            if px.empty:
+                continue
+            out = add_candle_patterns(px[["symbol", "date", "open", "high", "low", "close"]], patterns)
+            total += db.save_candles(out[["symbol", "date"] + [c for c in out.columns if c.startswith("cdl_")]], interval)
+    return total
 
 
 def update_market(

@@ -32,7 +32,7 @@ from ticker2db import StockDB
 
 from .analyze import split_symbols
 from .compete import discover_all
-from .genetic import PENALTY, GAConfig, evolve, fitness, load_ga_config, make_algo, sample_windows
+from .genetic import PENALTY, GAConfig, loader, evolve, fitness, load_ga_config, make_algo, sample_windows
 
 HERE = Path(__file__).parent
 
@@ -62,9 +62,10 @@ def tune_one(name: str, cfgd: dict, dry_run: bool) -> dict:
     analysis, validation = split_symbols(_symbols(cfg))
     with StockDB(cfg.db_path) as db:
         cache: Dict[str, object] = {}
+        _load = loader(db, [name])
         def load(s):
             if s not in cache:
-                cache[s] = db.load(s, with_indicators=True, with_market=db.has_market())
+                cache[s] = _load(s)
             return cache[s]
         train = sample_windows(analysis, load, cfg, rng, date_max=cfg.train_end, n=cfg.train_samples)
         rounds = [sample_windows(validation, load, cfg, rng, date_max=cfg.train_end)
