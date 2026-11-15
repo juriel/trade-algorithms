@@ -33,6 +33,7 @@ class Params:
     position_fraction: float = 1.0       # fracción del capital que se invierte en cada compra
     target_pct: Optional[float] = 0.05   # meta de venta (+5%); None = sin meta
     max_hold_days: Optional[int] = None  # vender a la apertura tras N barras; None = sin límite
+    stop_pct: Optional[float] = None     # vender a la apertura si el cierre de ayer cayó este % bajo la entrada
     commission_pct: float = 0.0005       # comisión por operación (cada lado)
     slippage_pct: float = 0.0005         # deslizamiento en ejecuciones a mercado (aperturas)
 
@@ -80,6 +81,17 @@ class Algorithm:
         """Serie booleana: venta a la apertura del día siguiente. Por defecto, nunca."""
         return pd.Series(False, index=df.index)
 
+    def target_series(self, df: pd.DataFrame) -> Optional[pd.Series]:
+        """Meta (fracción, p.ej. 0.05) según los datos al cierre de ayer. Por defecto, si el
+        algoritmo define `target_atr_mult`, la meta es ese múltiplo del ATR%; si no, `target_pct`."""
+        k = getattr(self.p, "target_atr_mult", None)
+        return None if k is None else k * df["atr_14"] / df["close"]
+
+    def stop_series(self, df: pd.DataFrame) -> Optional[pd.Series]:
+        """Distancia de stop (fracción) fijada al comprar. Con `stop_atr_mult` es un múltiplo del ATR%."""
+        k = getattr(self.p, "stop_atr_mult", None)
+        return None if k is None else k * df["atr_14"] / df["close"]
+
 
 @dataclass
 class Result:
@@ -125,10 +137,13 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
     sell = algo.sell_signal(df).shift(1, fill_value=False).fillna(False).to_numpy(bool)
 
     o, h, c = (df[k].to_numpy(float) for k in ("open", "high", "close"))
+    tp, sp = algo.target_series(df), algo.stop_series(df)   # valores de ayer -> aplican a la compra de hoy
+    tp = None if tp is None else tp.shift(1).to_numpy(float)
+    sp = None if sp is None else sp.shift(1).to_numpy(float)
     dates = df["date"].to_numpy()
     comm, slip = p.commission_pct, p.slippage_pct
 
-    cash, shares, entry_i, entry_px, target = p.initial_capital, 0, -1, 0.0, np.inf
+    cash, shares, entry_i, entry_px, target, stop_px = p.initial_capital, 0, -1, 0.0, np.inf, 0.0
     trades, equity, in_pos = [], np.empty(len(df)), np.zeros(len(df), bool)
 
     def close_trade(i, px, reason):
@@ -147,6 +162,8 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
         if shares:
             if sell[i]:
                 close_trade(i, o[i] * (1 - slip), "senal_apertura"); sold_today = True
+            elif c[i - 1] <= stop_px:
+                close_trade(i, o[i] * (1 - slip), "stop_apertura"); sold_today = True
             elif p.max_hold_days is not None and i - entry_i >= p.max_hold_days:
                 close_trade(i, o[i] * (1 - slip), "max_dias"); sold_today = True
             elif o[i] >= target:
@@ -160,7 +177,10 @@ def backtest(algo: Algorithm, df: pd.DataFrame) -> Result:
             if n > 0:
                 cash -= n * px * (1 + comm)
                 shares, entry_i, entry_px = n, i, px
-                target = px * (1 + p.target_pct) if p.target_pct is not None else np.inf
+                t_pct = tp[i] if tp is not None and not np.isnan(tp[i]) else p.target_pct
+                s_pct = sp[i] if sp is not None and not np.isnan(sp[i]) else p.stop_pct
+                target = px * (1 + t_pct) if t_pct is not None else np.inf
+                stop_px = px * (1 - s_pct) if s_pct is not None else 0.0
                 if h[i] >= target:           # la meta se alcanza el mismo día de la compra
                     close_trade(i, target, "meta")
 

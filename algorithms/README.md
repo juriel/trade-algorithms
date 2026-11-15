@@ -19,6 +19,15 @@ algo, res = run("algorithm03", "AAPL", stoch_max=15, target_pct=0.03)
 res.trades, res.equity, res.metrics
 ```
 
+## Herramientas
+- `python -m algorithms.compete [--group validation]`: torneo de todos los algoritmos + buy&hold.
+- `python -m algorithms.genetic`: optimiza las variables (genes en `genes.cfg`).
+- `python -m algorithms.analyze algorithm03c`: análisis de operaciones (motivo de salida, año, indicadores).
+- `ANALISIS.md`: análisis de los 5 mejores y sus versiones mejoradas (`algorithmNN_v1`, `_v2`).
+
+Salidas extra del motor: `stop_pct` (venta a la apertura si el cierre de ayer cayó ese % bajo la entrada) y
+metas/stops en múltiplos de ATR (`target_atr_mult`, `stop_atr_mult`).
+
 ## Variables editables
 Cada algoritmo tiene su `variables.cfg` (sección `[params]`, formato INI con comentarios `#`).
 Valores: números, `True`/`False` o `None`. Incluye las comunes (`initial_capital`,
