@@ -99,7 +99,8 @@ import random
 
 import numpy as np
 
-_TICKER = re.compile(r"^[A-Z]{1,5}$")
+_TICKER = re.compile(r"^[A-Z]{1,4}$")   # 4 letras máx.: evita preferentes/series (p.ej. SLMBP)
+_FUND_NAME = re.compile(r"\b(fund|trust|etf|income|strategy|portfolio|enhanced|tax-managed|buy-write|floating|preferred|series)\b", re.I)
 
 
 def total_returns(prices: pd.DataFrame, min_obs: int) -> pd.Series:
@@ -145,7 +146,8 @@ def russell_proxy(n: int = 20, seed: int = 0, min_cap: float = 3e8, max_cap: flo
     No es la lista oficial del Russell (iShares/FTSE Russell no ofrecen descarga libre): se usa el screener de
     Yahoo Finance con acciones de NYSE/Nasdaq y capitalización entre `min_cap` y `max_cap`, se sortean con `seed`
     y se exigen `min_bars` jornadas de historia (para poder sortear periodos de 300-600 jornadas).
-    Devuelve symbol, name, market_cap y exchange.
+    Devuelve symbol, name, market_cap y exchange. OJO: el screener cambia entre llamadas (las capitalizaciones se
+    mueven), así que la lista NO es reproducible con la misma semilla; guarda el resultado (p.ej. en un CSV).
     """
     import yfinance as yf
     q = yf.EquityQuery("and", [yf.EquityQuery("eq", ["region", "us"]),
@@ -158,7 +160,8 @@ def russell_proxy(n: int = 20, seed: int = 0, min_cap: float = 3e8, max_cap: flo
         if len(page) < 250 or offset > 4000:
             break
         offset += 250
-    cands = [x for x in quotes if _TICKER.match(x.get("symbol", "")) and x.get("quoteType") == "EQUITY"]
+    cands = [x for x in quotes if _TICKER.match(x.get("symbol", "")) and x.get("quoteType") == "EQUITY"
+             and x.get("shortName") and not _FUND_NAME.search(x["shortName"])]   # sin fondos cerrados (sin nombre / "Fund", "Trust"...)
     random.Random(seed).shuffle(cands)
     chosen = []
     for i in range(0, len(cands), 40):

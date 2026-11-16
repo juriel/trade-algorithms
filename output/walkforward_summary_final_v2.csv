@@ -1,0 +1,7 @@
+algorithm,pliegues,pruebas_oos,alpha_actual,actual_ic_inf,actual_ic_sup,alpha_pico,pico_ic_inf,pico_ic_sup,alpha_meseta,meseta_ic_inf,meseta_ic_sup,pico_menos_actual,pico_menos_actual_ic_inf,pico_menos_actual_ic_sup,pliegues_mejoran_pico,meseta_menos_actual,meseta_menos_actual_ic_inf,meseta_menos_actual_ic_sup,pliegues_mejoran_meseta,train_meseta,train_pico,fragilidad_pico,fragilidad_meseta
+algorithm01b,1,24,2.965,1.106,4.737,1.229,-1.47,3.8,0.889,-2.656,4.297,-1.736,-3.879,0.334,0,-2.077,-4.499,0.302,0,1.4,1.572,0.836,0.271
+algorithm02a_v2,1,24,-0.608,-5.57,4.767,-1.75,-4.524,1.015,-0.766,-5.66,3.675,-1.142,-7.056,4.44,0,-0.158,-8.932,6.662,0,0.521,1.021,0.992,0.135
+algorithm03a,1,24,3.724,2.051,5.351,1.205,0.579,1.745,1.205,0.579,1.745,-2.52,-3.872,-1.134,0,-2.52,-3.872,-1.134,0,-0.124,-0.124,0.162,0.162
+algorithm03a_v1,1,24,5.931,3.708,8.435,4.825,2.389,7.82,2.904,0.852,5.159,-1.107,-2.375,0.198,0,-3.028,-4.725,-1.26,0,0.321,0.37,0.385,-0.024
+algorithm03a_v2_r2,1,24,5.164,3.477,7.221,4.67,3.351,6.187,5.49,4.137,6.929,-0.494,-1.584,0.569,0,0.326,-1.077,1.696,1,0.146,0.342,0.626,0.139
+algorithm03c_v1,1,24,0.775,0.044,1.518,0.404,-0.127,0.913,0.231,-0.278,0.689,-0.372,-1.051,0.375,0,-0.545,-1.232,0.182,0,0.12,0.127,0.222,0.099

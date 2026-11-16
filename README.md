@@ -11,9 +11,13 @@ torneo entre algoritmos, optimización genética y análisis de operaciones.
 
 ```
 ticker2db/        librería de datos: descarga, indicadores, SQLite, S&P 500 y datos de mercado
-algorithms/       motor de backtest y algoritmos (una carpeta por algoritmo, con su variables.cfg)
+algorithms/       motor de backtest (una acción y cartera) y algoritmos (una carpeta por algoritmo, con su variables.cfg)
   engine.py         motor de backtest
-  compete.py        torneo entre algoritmos
+  compete.py        torneo entre algoritmos (una acción por prueba)
+  portfolio.py      backtest de CARTERA: 20 acciones con capital compartido (portfolio.cfg)
+  pcompete.py       torneo de carteras con alpha, IC y corrección por múltiples comparaciones
+  walkforward.py    optimización robusta de variables (walk-forward, meseta, Optuna)
+  metrics.py        alpha de timing, bootstrap, p-valores (Benjamini-Hochberg)
   genetic.py        algoritmo genético para optimizar variables
   tune.py           afinado de variables.cfg con selección fuera de muestra
   analyze.py        análisis de operaciones (motivos de salida, año, indicadores)
@@ -154,6 +158,23 @@ python -m algorithms.tune --dry-run                                             
   `variables.cfg` actual en otras acciones y solo lo adopta si gana; reescribe los valores conservando comentarios.
   Los espacios de búsqueda están en `algorithms/gene_ranges.cfg` (o `genes.cfg` por algoritmo).
 - Usar variables de mercado en un algoritmo: añadir la columna a `requires` y leer `df["mkt_vix"]` etc. (ver `features.stress_score`, `stress_expansion`, `healthy_bull`). `compete --since 1996-01-01` evita periodos sin datos de mercado.
+
+### Carteras (varias acciones a la vez)
+
+```bash
+python -m algorithms.portfolio algorithm03a --tests 5                 # una prueba de cartera por línea
+python -m algorithms.pcompete --tests 150 --seed 2026 --tag v1       # torneo de carteras (todos los algoritmos)
+python -m algorithms.pcompete algorithm03a algorithm02_v1 --set max_positions=5
+```
+
+Cada prueba sortea un periodo (inicio y 300-600 jornadas al azar) y 20 acciones al azar con datos en todo el periodo;
+el algoritmo opera hasta `max_positions` posiciones con capital compartido (cada una con 1/max_positions del capital;
+si hay más señales que posiciones, se elige al azar). Benchmark: las mismas 20 acciones a partes iguales.
+Métrica: **alpha de timing** (CAGR menos el de una cartera con la misma exposición; el efectivo rinde la letra a 13
+semanas) con IC 95%, p-valor ajustado y bandera de significancia. Ver `ANALISIS_CARTERAS.md`.
+
+Optimizar variables con validación fuera de muestra: `python -m algorithms.walkforward algorithm03a_v1 --set radius=0.3`
+(ver `algorithms/ANALISIS_WALKFORWARD.md`; el periodo desde 2024 ya fue consumido como confirmación).
 
 ### Resultados y límites
 
