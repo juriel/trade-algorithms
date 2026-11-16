@@ -10,6 +10,7 @@ Uso:  python -m algorithms.analyze algorithm03c [--group analysis|validation]
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import random
 from typing import List, Tuple
 
@@ -59,11 +60,22 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     return d
 
 
+SPLIT_FILE = Path(__file__).parent / "split_assignment.csv"
+
+
 def split_symbols(symbols: List[str], seed: int = 11) -> Tuple[List[str], List[str]]:
-    s = sorted(symbols)
-    random.Random(seed).shuffle(s)
-    half = len(s) // 2
-    return s[:half], s[half:]
+    """Divide las acciones en dos mitades disjuntas: (análisis, validación).
+
+    La asignación de las acciones ya conocidas está CONGELADA en `split_assignment.csv`, de modo que agregar acciones a la
+    base no mueve ninguna de grupo (evita que una acción usada para entrenar pase a validar). Las acciones nuevas se asignan de
+    forma determinista por la paridad del CRC32 de su símbolo (par = análisis, impar = validación)."""
+    import zlib
+    known = dict(pd.read_csv(SPLIT_FILE).values) if SPLIT_FILE.exists() else {}
+    an, va = [], []
+    for s in sorted(symbols):
+        g = known.get(s) or ("analysis" if zlib.crc32(s.encode()) % 2 == 0 else "validation")
+        (an if g == "analysis" else va).append(s)
+    return an, va
 
 
 def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 200,

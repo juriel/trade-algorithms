@@ -118,3 +118,12 @@ def test_size_series_scales_position_in_portfolio():
     base = backtest_portfolio(_Signals([5], **kw), frames, start_bar=1, max_positions=10, initial_capital=100_000)
     big = backtest_portfolio(_Sized([5], **kw), frames, start_bar=1, max_positions=10, initial_capital=100_000)
     assert abs(big.trades["shares"].iloc[0] / base.trades["shares"].iloc[0] - 2.0) < 0.05
+
+
+def test_split_symbols_is_stable_when_adding_symbols():
+    from algorithms.analyze import split_symbols
+    base = [f"S{i:03d}" for i in range(60)]
+    an0, va0 = split_symbols(base)
+    an1, va1 = split_symbols(base + [f"N{i:03d}" for i in range(40)])
+    assert set(an0) <= set(an1) and set(va0) <= set(va1)            # nadie cambia de grupo
+    assert set(an1).isdisjoint(va1) and len(an1) + len(va1) == 100

@@ -8,3 +8,5 @@ __pycache__/
 .~lock.*
 output/competition_tests*.csv
 output/portfolio_tests*.csv
+output/ai_data/
+output/ai_models/

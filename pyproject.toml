@@ -9,5 +9,8 @@ description = "Descarga de stocks (yfinance), indicadores técnicos (TA-Lib) y a
 requires-python = ">=3.9"
 dependencies = ["yfinance>=0.2.40", "TA-Lib>=0.4.28", "pandas", "numpy", "requests", "lxml", "openpyxl"]
 
+[project.optional-dependencies]
+ml = ["scikit-learn", "joblib", "optuna"]
+
 [tool.setuptools]
 packages = ["ticker2db"]
