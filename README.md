@@ -133,6 +133,7 @@ editables, formato INI con comentarios; valores numéricos, `True/False` o `None
 | `_r1`, `_r2` | Variaciones basadas en investigación en Internet | sobre los 6 mejores |
 | `creative01`…`06` | Ideas nuevas: clímax vendedor, giro del VIX, compresión y ruptura, líderes en retroceso, interruptor macro, fin de mes | independientes |
 | `_i1`, `_i2` | Mejoras de los 5 mejores (filtro de caída profunda; tamaño de posición por profundidad) | sobre los 5 mejores de carteras |
+| `_vol1`, `_vol2` | Filtros de volumen sobre los mejores (no mejoraron; ver `ANALISIS_VOLUMEN.md`) | sobre los 3 mejores |
 | `_m1`, `_m2` | Filtros con variables de mercado (VIX, amplitud, S&P 500, crédito, curva de tasas) | sobre los 6 mejores |
 
 `_v1`/`_v2` son mejoras derivadas del análisis de operaciones; `_r1`/`_r2` incorporan ideas de la literatura

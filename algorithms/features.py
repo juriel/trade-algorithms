@@ -105,3 +105,25 @@ def ret_n(df: pd.DataFrame, n: int) -> pd.Series:
 def dist_high(df: pd.DataFrame, n: int = 252) -> pd.Series:
     """Distancia % del cierre a su máximo de `n` días (0 = en máximos, -40 = 40% bajo el máximo)."""
     return (df["close"] / df["close"].rolling(n, min_periods=60).max() - 1) * 100
+
+
+# ----------------------------- volumen: sequedad, flujo de dinero y OBV -----------------------------
+def volume_dryup(df: pd.DataFrame, recent: int = 5, base: int = 20) -> pd.Series:
+    """Volumen medio de los últimos `recent` días / volumen medio de los `base` días anteriores a ellos.
+    < 1 = el volumen se está secando (poca presión vendedora); > 1 = volumen en aumento."""
+    r = df["volume"].rolling(recent).mean()
+    b = df["volume"].shift(recent).rolling(base).mean()
+    return r / b.replace(0, np.nan)
+
+
+def cmf(df: pd.DataFrame, n: int = 20) -> pd.Series:
+    """Chaikin Money Flow de `n` días (-1 a 1): > 0 acumulación (cierres en la parte alta del rango con volumen), < 0 distribución."""
+    rng = (df["high"] - df["low"]).replace(0, np.nan)
+    mfv = ((df["close"] - df["low"]) - (df["high"] - df["close"])) / rng * df["volume"]
+    return mfv.rolling(n).sum() / df["volume"].rolling(n).sum().replace(0, np.nan)
+
+
+def obv_flow(df: pd.DataFrame, n: int = 20) -> pd.Series:
+    """Cambio del OBV en `n` días en unidades de volumen medio diario x n (-1 a 1 aprox.): >0 entra volumen comprador."""
+    obv = (np.sign(df["close"].diff().fillna(0)) * df["volume"]).cumsum()
+    return (obv - obv.shift(n)) / (df["volume"].rolling(n).sum().replace(0, np.nan))

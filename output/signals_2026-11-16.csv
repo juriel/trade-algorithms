@@ -1,0 +1,4 @@
+symbol,algorithm,close,rsi_14,ret5_pct,atr_pct,size_mult,target_pct,stop_pct,max_hold_days,company,weight
+COIN,algorithm01b_i2,127.65,32.429,-5.276,7.483,1.0,4.0,,8,COINBASE GLOBAL INC  CLASS A,0.045
+IFF,algorithm01b_i2,81.16,34.963,-1.767,3.107,1.0,4.0,,8,INTL FLAVORS + FRAGRANCES,0.031
+APTV,algorithm01b_i2,38.75,32.814,-1.749,3.833,1.0,4.0,,8,APTIV PLC,0.012

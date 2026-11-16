@@ -21,7 +21,7 @@ from ticker2db import StockDB
 from .engine import backtest
 from .genetic import load_ga_config, loader, make_algo
 
-EXTRA = ["vol_ratio", "ret5", "ret20", "dist_high252", "ibs", "gap_pct", "range_pct", "dow", "cdl_net"]
+EXTRA = ["vol_ratio3", "vol_dryup", "cmf20", "obv_flow20", "vol_ratio", "ret5", "ret20", "dist_high252", "ibs", "gap_pct", "range_pct", "dow", "cdl_net"]
 FEATURES = ["rsi_14", "stoch_k", "adx_14", "cci_14", "mfi_14", "atr_pct", "dist_sma20",
             "dist_sma50", "dist_sma200", "slope_sma200", "bb_width", "bb_pos", "macd_hist_pct"]
 
@@ -38,6 +38,13 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     # variables de la jornada de la señal (todas se conocen al cierre)
     rng = (d["high"] - d["low"]).replace(0, np.nan)
     d["vol_ratio"] = d["volume"] / d["volume"].rolling(20).mean().shift(1).replace(0, np.nan)
+    d["vol_ratio3"] = d["volume"].rolling(3).mean() / d["volume"].rolling(20).mean().shift(3).replace(0, np.nan)
+    d["vol_dryup"] = d["volume"].rolling(5).mean() / d["volume"].shift(5).rolling(20).mean().replace(0, np.nan)
+    _rng = (d["high"] - d["low"]).replace(0, np.nan)
+    _mfv = ((d["close"] - d["low"]) - (d["high"] - d["close"])) / _rng * d["volume"]
+    d["cmf20"] = _mfv.rolling(20).sum() / d["volume"].rolling(20).sum().replace(0, np.nan)
+    _obv = (np.sign(d["close"].diff().fillna(0)) * d["volume"]).cumsum()
+    d["obv_flow20"] = (_obv - _obv.shift(20)) / d["volume"].rolling(20).sum().replace(0, np.nan)
     d["ret5"] = d["close"].pct_change(5) * 100
     d["ret20"] = d["close"].pct_change(20) * 100
     d["dist_high252"] = (d["close"] / d["close"].rolling(252, min_periods=60).max() - 1) * 100
