@@ -57,8 +57,8 @@ def _prepare(algo: Algorithm, df: pd.DataFrame) -> dict:
     if missing:
         raise ValueError(f"Faltan columnas en los datos: {missing}")
     sh = lambda s: s.shift(1, fill_value=False).fillna(False).to_numpy(bool)
-    tp, sp = algo.target_series(df), algo.stop_series(df)
-    return {"o": df["open"].to_numpy(float), "h": df["high"].to_numpy(float), "c": df["close"].to_numpy(float),
+    tp, sp, sz = algo.target_series(df), algo.stop_series(df), algo.size_series(df)
+    return {"sz": None if sz is None else sz.shift(1).to_numpy(float), "o": df["open"].to_numpy(float), "h": df["high"].to_numpy(float), "c": df["close"].to_numpy(float),
             "buy": sh(algo.buy_signal(df)), "sell": sh(algo.sell_signal(df)),
             "tp": None if tp is None else tp.shift(1).to_numpy(float),
             "sp": None if sp is None else sp.shift(1).to_numpy(float)}
@@ -126,7 +126,8 @@ def backtest_portfolio(algo: Algorithm, frames: Dict[str, pd.DataFrame], start_b
             for s in cands:
                 a = arr[s]
                 px = a["o"][i] * (1 + slip)
-                budget = min(eq_open / max_positions * p.position_fraction, cash)
+                mult = a["sz"][i] if a["sz"] is not None and not np.isnan(a["sz"][i]) else 1.0
+                budget = min(eq_open / max_positions * p.position_fraction * max(mult, 0.0), cash)
                 n = int(budget // (px * (1 + comm)))
                 if n <= 0:
                     continue

@@ -21,6 +21,7 @@ from ticker2db import StockDB
 from .engine import backtest
 from .genetic import load_ga_config, loader, make_algo
 
+EXTRA = ["vol_ratio", "ret5", "ret20", "dist_high252", "ibs", "gap_pct", "range_pct", "dow", "cdl_net"]
 FEATURES = ["rsi_14", "stoch_k", "adx_14", "cci_14", "mfi_14", "atr_pct", "dist_sma20",
             "dist_sma50", "dist_sma200", "slope_sma200", "bb_width", "bb_pos", "macd_hist_pct"]
 
@@ -34,6 +35,20 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     d["bb_width"] = (d["bb_upper"] - d["bb_lower"]) / d["bb_middle"] * 100
     d["bb_pos"] = (d["close"] - d["bb_lower"]) / (d["bb_upper"] - d["bb_lower"])
     d["macd_hist_pct"] = d["macd_hist"] / d["close"] * 100
+    # variables de la jornada de la señal (todas se conocen al cierre)
+    rng = (d["high"] - d["low"]).replace(0, np.nan)
+    d["vol_ratio"] = d["volume"] / d["volume"].rolling(20).mean().shift(1).replace(0, np.nan)
+    d["ret5"] = d["close"].pct_change(5) * 100
+    d["ret20"] = d["close"].pct_change(20) * 100
+    d["dist_high252"] = (d["close"] / d["close"].rolling(252, min_periods=60).max() - 1) * 100
+    d["ibs"] = (d["close"] - d["low"]) / rng
+    d["gap_pct"] = (d["open"] / d["close"].shift(1) - 1) * 100
+    d["range_pct"] = rng / d["close"] * 100
+    d["dow"] = pd.to_datetime(d["date"]).dt.dayofweek
+    cdl = [c for c in d.columns if c.startswith("cdl_") and c not in ("cdl_net",)]
+    neutral = {"cdl_doji", "cdl_longleggeddoji", "cdl_rickshawman", "cdl_dragonflydoji", "cdl_gravestonedoji", "cdl_takuri"}
+    cdl = [c for c in cdl if c not in neutral]
+    d["cdl_net"] = ((d[cdl] > 0).sum(axis=1) - (d[cdl] < 0).sum(axis=1)) if cdl else 0
     return d
 
 
@@ -51,7 +66,7 @@ def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 20
     algo = make_algo(name, cfg=cfg_file) if cfg_file else make_algo(name)
     out = []
     with StockDB(db_path) as db:
-        load = loader(db, [name])
+        load = lambda s: db.load(s, with_indicators=True, with_market=db.has_market(), with_candles=db.has_candles())
         for sym in symbols:
             df = load(sym).sort_values("date").reset_index(drop=True)
             if len(df) < warmup + 100:
@@ -61,7 +76,7 @@ def collect_trades(name: str, symbols: List[str], db_path: str, warmup: int = 20
             if r.trades.empty:
                 continue
             mkt = [c for c in df.columns if c.startswith("mkt_")]
-            prev = add_features(df).shift(1)[["date"] + FEATURES + mkt].rename(columns={"date": "signal_date"})
+            prev = add_features(df).shift(1)[["date"] + FEATURES + EXTRA + mkt].rename(columns={"date": "signal_date"})
             prev["entry_date"] = df["date"]
             t = r.trades.merge(prev, on="entry_date", how="left")
             t["symbol"] = sym
@@ -93,7 +108,7 @@ def report(name: str, t: pd.DataFrame, bins: int = 4) -> str:
     y["mean"] *= 100
     y.index = [f"{i}-{i + 4}" for i in y.index]
     L.append(y.round(2).T.to_string()); L += ["", f"Retorno medio % por cuartil de cada indicador (de ayer):"]
-    for f in [c for c in t.columns if c in FEATURES or c.startswith("mkt_")]:
+    for f in [c for c in t.columns if c in FEATURES or c in EXTRA or c.startswith("mkt_")]:
         s = t[[f, "return_pct"]].dropna()
         if s[f].nunique() < bins:
             continue

@@ -106,3 +106,15 @@ def test_walkforward_trust_region_and_determinism():
         assert 2.8 <= g["x"] <= 5.2 and 7 <= g["n"] <= 13 and g["b"] is True and g["o"] is None
     p = perturb({"x": 4.0, "n": 10, "b": True, "o": None}, genes, random.Random(0), 0.1)
     assert 3.6 <= p["x"] <= 4.4 and p["n"] != 10 and p["o"] is None
+
+
+def test_size_series_scales_position_in_portfolio():
+    class _Sized(_Signals):
+        def size_series(self, df):
+            return pd.Series(2.0, index=df.index)
+
+    frames = {"A": _frame(seed=1)}
+    kw = dict(target_pct=None, commission_pct=0, slippage_pct=0, cash_interest=False)
+    base = backtest_portfolio(_Signals([5], **kw), frames, start_bar=1, max_positions=10, initial_capital=100_000)
+    big = backtest_portfolio(_Sized([5], **kw), frames, start_bar=1, max_positions=10, initial_capital=100_000)
+    assert abs(big.trades["shares"].iloc[0] / base.trades["shares"].iloc[0] - 2.0) < 0.05

@@ -46,17 +46,23 @@ def _eval_algo(name: str) -> List[dict]:
 
 
 def pcompete(names: List[str], n_tests: int, seed: int, workers: int, pc: PortfolioConfig, tag: str = "",
-             log=print) -> pd.DataFrame:
+             log=print, group: str = "all", date_min=None, date_max=None) -> pd.DataFrame:
     global _TESTS, _PC
     _PC = pc
     cfg = load_ga_config()
     log(f"Torneo de carteras: {len(names)} algoritmos + {BENCH}, {n_tests} pruebas de {pc.n_stocks} acciones "
         f"({cfg.min_bars}-{cfg.max_bars} jornadas), hasta {pc.max_positions} posiciones, seed={seed}")
+    limits = [f"{k}={v}" for k, v in (("group", group if group != "all" else None), ("desde", date_min), ("hasta", date_max)) if v]
+    if limits:
+        log("  RESTRICCIONES al sorteo: " + ", ".join(limits))
     cols = {"date", "mkt_irx", *OHLC}
     for n in names:
         cols |= set(make_algo(n).requires)
     with StockDB(cfg.db_path) as db:
         symbols = db.symbols()
+        if group != "all":   # mismas mitades disjuntas que algorithms.analyze
+            from .analyze import split_symbols
+            symbols = split_symbols(symbols)[0 if group == "analysis" else 1]
         spans = pd.read_sql_query("SELECT symbol, MIN(date) AS first, MAX(date) AS last FROM prices WHERE interval='1d' "
                                   "GROUP BY symbol", db.conn, parse_dates=["first", "last"]).set_index("symbol").loc[symbols]
         calendar = pd.DatetimeIndex(db.load("^GSPC", with_indicators=False)["date"])
@@ -66,7 +72,7 @@ def pcompete(names: List[str], n_tests: int, seed: int, workers: int, pc: Portfo
             d = db.load(s, with_indicators=True, with_market=db.has_market(), with_candles=with_cdl)
             cache[s] = d[[c for c in d.columns if c in cols]]
         tests = [sample_portfolio_test(spans, calendar, cache.__getitem__, cfg, pc, random.Random(f"{seed}-p{k}"),
-                                       columns=cols) for k in range(n_tests)]
+                                       columns=cols, date_min=date_min, date_max=date_max) for k in range(n_tests)]
     del cache
     gc.collect()
     starts = [f[s[0]]["date"].iloc[sb] for s, f, sb in tests]
@@ -106,10 +112,14 @@ def main():
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--group", choices=["all", "analysis", "validation"], default="all")
+    ap.add_argument("--date-min", help="el periodo operado no empieza antes de esta fecha")
+    ap.add_argument("--date-max", help="el periodo operado termina antes de esta fecha")
     ap.add_argument("--set", nargs="*", default=[], metavar="clave=valor", help="sobrescribe portfolio.cfg")
     a = ap.parse_args()
     pc = load_portfolio_config(**{k: ast.literal_eval(v) for k, v in (s.split("=", 1) for s in a.set)})
-    out = pcompete(a.algorithms or discover_all(), a.tests, a.seed, a.workers, pc, a.tag)
+    out = pcompete(a.algorithms or discover_all(), a.tests, a.seed, a.workers, pc, a.tag, group=a.group,
+                   date_min=a.date_min, date_max=a.date_max)
     pd.set_option("display.width", 230)
     cols = ["puesto", "alpha_medio", "alpha_ic_inf", "alpha_ic_sup", "p_ajustado", "significativo", "exceso_vs_bh",
             "cagr_pct", "bh_cagr_pct", "max_dd_pct", "exposicion_pct", "calmar"]

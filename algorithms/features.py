@@ -94,3 +94,14 @@ def business_days_left(df: pd.DataFrame) -> pd.Series:
 def rel_strength(df: pd.DataFrame, n: int = 120) -> pd.Series:
     """Retorno % de la acción en `n` días menos el del S&P 500 (`mkt_spx_ret{n}`, n = 60 o 120)."""
     return df["close"].pct_change(n) * 100 - df[f"mkt_spx_ret{n}"]
+
+
+# ----------------------------- profundidad de la caída (para filtros y tamaño) -----------------------------
+def ret_n(df: pd.DataFrame, n: int) -> pd.Series:
+    """Retorno % de los últimos `n` días (negativo = caída)."""
+    return df["close"].pct_change(n) * 100
+
+
+def dist_high(df: pd.DataFrame, n: int = 252) -> pd.Series:
+    """Distancia % del cierre a su máximo de `n` días (0 = en máximos, -40 = 40% bajo el máximo)."""
+    return (df["close"] / df["close"].rolling(n, min_periods=60).max() - 1) * 100

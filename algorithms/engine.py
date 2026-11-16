@@ -88,6 +88,11 @@ class Algorithm:
         k = getattr(self.p, "target_atr_mult", None)
         return None if k is None else k * df["atr_14"] / df["close"]
 
+    def size_series(self, df: pd.DataFrame) -> Optional[pd.Series]:
+        """Multiplicador del tamaño de la posición (1 = tamaño normal) según los datos al cierre de ayer. Solo lo usa el
+        motor de carteras (`portfolio.py`); el de una acción lo ignora. Por defecto None (tamaño normal)."""
+        return None
+
     def stop_series(self, df: pd.DataFrame) -> Optional[pd.Series]:
         """Distancia de stop (fracción) fijada al comprar. Con `stop_atr_mult` es un múltiplo del ATR%."""
         k = getattr(self.p, "stop_atr_mult", None)

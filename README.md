@@ -132,6 +132,7 @@ editables, formato INI con comentarios; valores numéricos, `True/False` o `None
 | `03` | Retorno a la media con Bollinger | `03`, `03a` (RSI), `03b` (CCI), `03c` (MFI) y `_v1`, `_v2` |
 | `_r1`, `_r2` | Variaciones basadas en investigación en Internet | sobre los 6 mejores |
 | `creative01`…`06` | Ideas nuevas: clímax vendedor, giro del VIX, compresión y ruptura, líderes en retroceso, interruptor macro, fin de mes | independientes |
+| `_i1`, `_i2` | Mejoras de los 5 mejores (filtro de caída profunda; tamaño de posición por profundidad) | sobre los 5 mejores de carteras |
 | `_m1`, `_m2` | Filtros con variables de mercado (VIX, amplitud, S&P 500, crédito, curva de tasas) | sobre los 6 mejores |
 
 `_v1`/`_v2` son mejoras derivadas del análisis de operaciones; `_r1`/`_r2` incorporan ideas de la literatura
@@ -139,7 +140,8 @@ editables, formato INI con comentarios; valores numéricos, `True/False` o `None
 Detalle y resultados: [`algorithms/ANALISIS.md`](algorithms/ANALISIS.md) y
 [`algorithms/ANALISIS_INVESTIGACION.md`](algorithms/ANALISIS_INVESTIGACION.md) y
 [`algorithms/ANALISIS_MERCADO.md`](algorithms/ANALISIS_MERCADO.md) y
-[`algorithms/ANALISIS_CREATIVOS.md`](algorithms/ANALISIS_CREATIVOS.md).
+[`algorithms/ANALISIS_CREATIVOS.md`](algorithms/ANALISIS_CREATIVOS.md) y
+[`algorithms/ANALISIS_MEJORAS.md`](algorithms/ANALISIS_MEJORAS.md).
 
 ### Herramientas
 
